@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="app_name">上拉刷新滑动删除ListView</string>
+    <string name="hello_world">Hello world!</string>
+    <string name="last_refresh_time">最后刷新时间:</string>
+
+</resources>
