@@ -10,32 +10,31 @@ import android.view.animation.Animation;
 import android.view.animation.RotateAnimation;
 import android.widget.AdapterView;
 import android.widget.ImageView;
-import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
-
 
 public class MyRefreshListView extends ListView implements android.widget.AdapterView.OnItemClickListener {
 	private View mHeadView, mFooterView;
 	private float endY = -1;
 	private int headViewHeight, footViewHeight;
-	private static final int RELASE_REFRESH = 0;// 松开刷新
-	private static final int REFRESHING = 1;// 正在刷新
-	private static final int DOWN_REFRESH = 2;// 下拉刷新
-	private static final int UP_LOADING = 3;// 上拉加载
-	private static final int LOADING = 4;// 正在加载
-	private static final int RELEAS_LOADING = 5;// 松手加载加载
-	private static int headViewCurrentState = DOWN_REFRESH;
-	private static int foodViewCurrentState = UP_LOADING;
+	private final int RELASE_REFRESH = 0;// 松开刷新
+	private final int REFRESHING = 1;// 正在刷新
+	private final int DOWN_REFRESH = 2;// 下拉刷新
+	private final int UP_LOADING = 3;// 上拉加载
+	private final int LOADING = 4;// 正在加载
+	private final int RELEAS_LOADING = 5;// 松手加载加载
+	private final int UP_DISTANCE = 10;// 上拉多少距离显示可松手
+	private int headViewCurrentState = DOWN_REFRESH;
+	private int footViewCurrentState = UP_LOADING;
 	private TextView tv_title, tv_time, tv_foot;
 	private ImageView iv_arr;
 	private RotateAnimation downRotateAnimation, upRotateAnimation;
 	private ProgressBar pb_head, pb_foot;
-	private static int DURATIOM_Millis = 500;// 动画执行时间
+	private static int DURATIOM_Millis = 200;// 动画执行时间
 	private OnRefreshListener onRefreshListener;
 	private String lastRefreshTime = getContext().getString(R.string.last_refresh_time) + getCurrentTime();
-//	private boolean isLoadMore = false;// 保证onLoadMore()方法只调用一次,同时标记是否正在加载
+	// private boolean isLoadMore = false;// 保证onLoadMore()方法只调用一次,同时标记是否正在加载
 	private final static float OFFSET_RADIO = 1.8f;
 
 	public void setOnRefreshListener(OnRefreshListener onRefreshListener) {
@@ -104,12 +103,14 @@ public class MyRefreshListView extends ListView implements android.widget.Adapte
 		// mFooterView.setPadding(0, -footViewHeight, 0, 0);// 隐藏
 		mFooterView.setPadding(0, 0, 0, 0);// 默认显示
 	}
-//
-//	public int getHeadTopMagin() {
-//		// mContentView有父布局才行，用mFootView就会报空指针，因为没有父布局包裹
-//		LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) headContentView.getLayoutParams();
-//		return lp.topMargin;
-//	}
+
+	//
+	// public int getHeadTopMagin() {
+	// // mContentView有父布局才行，用mFootView就会报空指针，因为没有父布局包裹
+	// LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams)
+	// headContentView.getLayoutParams();
+	// return lp.topMargin;
+	// }
 
 	private void initHeadView() {
 		mHeadView = View.inflate(getContext(), R.layout.headview_layout, null);
@@ -163,7 +164,7 @@ public class MyRefreshListView extends ListView implements android.widget.Adapte
 					// offset > 0表示headView已经完全出来
 					// 松开刷新
 					headViewCurrentState = RELASE_REFRESH;
-					refreshByState();
+					refreshByState(headViewCurrentState);
 					// 注意return
 					// true位置，要是放在下面break的位置，那么Move的事件都会被拦截，listview向下滑动困难
 					return true;
@@ -172,21 +173,25 @@ public class MyRefreshListView extends ListView implements android.widget.Adapte
 			if (headViewCurrentState == RELASE_REFRESH && getFirstVisiblePosition() == 0 && headViewOffset < 0) {
 				// 上拉(返回初始状态)
 				headViewCurrentState = DOWN_REFRESH;
-				refreshByState();
+				refreshByState(headViewCurrentState);
 				return true;
 			}
-			footViewOffset = (int) (dy - footViewHeight);
-			if (dy < 0 && getCount() > 0 && (getLastVisiblePosition() == (getCount() - 1))) {
+			footViewOffset = (int) (Math.abs(dy) - footViewHeight - UP_DISTANCE);
+			if (dy < 0 && getCount() > 0 && (getLastVisiblePosition() == (getCount() - 1)) && footViewOffset < 0) {
 				// 上拉加载
-				mFooterView.setPadding(0, 0, 0, (int)Math.abs(dy));
-				if (mFooterView.getPaddingBottom()>0) {
-					foodViewCurrentState=RELEAS_LOADING;
-					tv_foot.setText("松开刷新");
-				}else {
+				mFooterView.setPadding(0, 0, 0, (int) Math.abs(dy));
+				if (mFooterView.getPaddingBottom() > UP_DISTANCE) {
+					footViewCurrentState = RELEAS_LOADING;
+					tv_foot.setText("放手吧");
+				} else {
+					footViewCurrentState = UP_LOADING;
 					tv_foot.setText("上拉刷新");
 				}
-				
+
 			}
+			// if (footViewCurrentState==) {
+			//
+			// }
 			break;
 		case MotionEvent.ACTION_UP:
 			endY = -1;
@@ -195,17 +200,23 @@ public class MyRefreshListView extends ListView implements android.widget.Adapte
 				// offset > 0表示headView已经完全出来
 				// 正在刷新
 				headViewCurrentState = REFRESHING;
-				refreshByState();
+				refreshByState(headViewCurrentState);
 				return true;
 			}
-			if (mHeadView.getPaddingTop()!=-headViewHeight && headViewOffset < 0 && headViewCurrentState == DOWN_REFRESH) {
+			// 下拉刷新，拉下来后没有松手，又上拉一部分，将headView部分隐藏部分显示。此时松手，将headView重置
+			if (mHeadView.getPaddingTop() != -headViewHeight && headViewOffset < 0 && headViewCurrentState == DOWN_REFRESH) {
 				resetHeadView();
 				return true;
 			}
-			if (foodViewCurrentState==RELEAS_LOADING&&onRefreshListener!=null) {
-				foodViewCurrentState=LOADING;
-				refreshByState();
-				onRefreshListener.onLoadMore();
+
+			if (footViewCurrentState == RELEAS_LOADING && footViewOffset > 0) {
+				footViewCurrentState = LOADING;
+				refreshByState(footViewCurrentState);
+				return true;
+			}
+			// 上拉加载，上拉后后没有松手，又下拉一部分，将footView部分隐藏部分显示。此时松手，将footView重置
+			if (footViewCurrentState == UP_LOADING && mFooterView.getPaddingBottom() < UP_DISTANCE && footViewOffset < 0) {
+				resetFootView();
 				return true;
 			}
 			break;
@@ -226,8 +237,20 @@ public class MyRefreshListView extends ListView implements android.widget.Adapte
 		setSelection(0);
 	}
 
-	public void refreshByState() {
-		switch (headViewCurrentState) {
+	/**
+	 * 将footView初始化到初始状态
+	 */
+	public void resetFootView() {
+		headViewCurrentState = UP_LOADING;
+		mHeadView.setPadding(0, 0, 0, 0);
+		tv_title.setText("上拉刷新");
+		if (getCount() > 0) {
+			setSelection(getCount() - 1);
+		}
+	}
+
+	public void refreshByState(int state) {
+		switch (state) {
 		case DOWN_REFRESH:
 			tv_title.setText("下拉刷新");
 			iv_arr.startAnimation(downRotateAnimation);
@@ -243,11 +266,15 @@ public class MyRefreshListView extends ListView implements android.widget.Adapte
 			}
 			break;
 		case RELASE_REFRESH:
+			tv_title.setText("放手吧");
 			iv_arr.startAnimation(upRotateAnimation);
 			break;
 		case LOADING:
 			pb_foot.setVisibility(View.VISIBLE);
 			tv_foot.setText("正在加载");
+			if (onRefreshListener != null) {
+				onRefreshListener.onLoadMore();
+			}
 			break;
 		default:
 			break;
@@ -255,9 +282,9 @@ public class MyRefreshListView extends ListView implements android.widget.Adapte
 	};
 
 	public void onComplete() {
-		if (foodViewCurrentState==LOADING) {
+		if (footViewCurrentState == LOADING) {
 			mFooterView.setPadding(0, 0, 0, 0);
-			foodViewCurrentState = UP_LOADING;
+			footViewCurrentState = UP_LOADING;
 			pb_foot.setVisibility(View.INVISIBLE);
 			tv_foot.setText("上拉刷新");
 		}
@@ -283,7 +310,14 @@ public class MyRefreshListView extends ListView implements android.widget.Adapte
 	}
 
 	OnItemClickListener mItemClickListener;
-	private int headViewOffset,footViewOffset;
+	/**
+	 * 下拉过程中headView下拉的距离-headViewHeight
+	 */
+	private int headViewOffset;
+	/**
+	 * 上拉过程中headView上拉了的距离-footViewHeight-UP-DISTANCE
+	 */
+	private int footViewOffset;
 
 	@Override
 	public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
